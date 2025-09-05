@@ -18,9 +18,12 @@ import logging
 import copy
 import re
 
+from api.db import LLMType
+from api.db.services.llm_service import LLMBundle
 from api.db import ParserType
 from rag.nlp import rag_tokenizer, tokenize, tokenize_table, add_positions, bullets_category, title_frequency, tokenize_chunks
 from deepdoc.parser import PdfParser, PlainParser
+from deepdoc.parser.figure_parser import VisionFigureParser
 import numpy as np
 
 
@@ -30,7 +33,8 @@ class Pdf(PdfParser):
         super().__init__()
 
     def __call__(self, filename, binary=None, from_page=0,
-                 to_page=100000, zoomin=3, callback=None):
+                 to_page=100000, zoomin=3, callback=None, separate_tables_figures=False):
+
         from timeit import default_timer as timer
         start = timer()
         callback(msg="OCR started")
@@ -54,7 +58,11 @@ class Pdf(PdfParser):
 
         start = timer()
         self._text_merge()
-        tbls = self._extract_table_figure(True, zoomin, True, True)
+        figures = []
+        if separate_tables_figures:
+            tbls, figures = self._extract_table_figure(True, zoomin, True, True, True)
+        else:
+            tbls = self._extract_table_figure(True, zoomin, True, True)
         column_width = np.median([b["x1"] - b["x0"] for b in self.boxes])
         self._concat_downward()
         self._filter_forpages()
@@ -80,7 +88,8 @@ class Pdf(PdfParser):
                 "abstract": "",
                 "sections": [(b["text"] + self._line_tag(b, zoomin), b.get("layoutno", "")) for b in self.boxes if
                              re.match(r"(text|title)", b.get("layoutno", "text"))],
-                "tables": tbls
+                "tables": tbls,
+                "figures": figures
             }
         # get title and authors
         title = ""
@@ -133,7 +142,8 @@ class Pdf(PdfParser):
             "abstract": abstr,
             "sections": [(b["text"] + self._line_tag(b, zoomin), b.get("layoutno", "")) for b in self.boxes[i:] if
                          re.match(r"(text|title)", b.get("layoutno", "text"))],
-            "tables": tbls
+            "tables": tbls,
+            "figures": figures
         }
 
 
@@ -158,7 +168,28 @@ def chunk(filename, binary=None, from_page=0, to_page=100000,
             }
         else:
             pdf_parser = Pdf()
-            paper = pdf_parser(filename if not binary else binary,
+
+            try:
+                vision_model = LLMBundle(kwargs["tenant_id"], LLMType.IMAGE2TEXT)
+                callback(0.15, "Visual model detected. Attempting to enhance figure extraction...")
+            except Exception:
+                vision_model = None
+
+            if vision_model:
+                paper = pdf_parser(filename if not binary else binary,
+                                   from_page=from_page, to_page=to_page, callback=callback,
+                                   separate_tables_figures=True)
+                figures = paper["figures"]
+                callback(0.5, "Basic parsing complete. Proceeding with figure enhancement...")
+                try:
+                    pdf_vision_parser = VisionFigureParser(vision_model=vision_model, figures_data=figures, **kwargs)
+                    boosted_figures = pdf_vision_parser(callback=callback)
+                    paper["tables"].extend(boosted_figures)
+                except Exception as e:
+                    callback(0.6, f"Visual model error: {e}. Skipping figure parsing enhancement.")
+                    paper["tables"].extend(figures)
+            else:
+                paper = pdf_parser(filename if not binary else binary,
                                from_page=from_page, to_page=to_page, callback=callback)
     else:
         raise NotImplementedError("file type not supported yet(pdf supported)")
