@@ -17,6 +17,7 @@
 import logging
 import copy
 import re
+import json
 
 from api.db import LLMType
 from api.db.services.llm_service import LLMBundle
@@ -24,6 +25,7 @@ from api.db import ParserType
 from rag.nlp import rag_tokenizer, tokenize, tokenize_table, add_positions, bullets_category, title_frequency, tokenize_chunks
 from deepdoc.parser import PdfParser, PlainParser
 from deepdoc.parser.figure_parser import VisionFigureParser
+from deepdoc.parser.flowchart_parser import FlowchartVisionParser
 import numpy as np
 
 
@@ -146,6 +148,33 @@ class Pdf(PdfParser):
             "figures": figures
         }
 
+def extract_is_flowchart(text):
+    # 直接匹配 is_flowchart 的值
+    match = re.search(r'is_flowchart\s*:\s*(true|false)', text, re.IGNORECASE)
+    if match:
+        return match.group(1).lower() == 'true'
+    return False
+
+def merge_figures_and_boosted_figures(figures, boosted_figures):
+    # 为每个boosted_figure提取is_flowchart
+    for i, (image_data, positions) in enumerate(boosted_figures):
+        text_description = image_data[1]  # 获取文本描述
+        is_flowchart = extract_is_flowchart(text_description)
+        boosted_figures[i] = (image_data[0], positions, is_flowchart)  # 添加is_flowchart字段
+
+    # 合并到原始figures中
+    merged_figures = []
+    for i, (image_data, positions) in enumerate(figures):
+        # 这里假设通过位置信息匹配，可以根据实际情况调整匹配逻辑
+        is_flowchart = None
+        for boosted_image_data, boosted_positions, boosted_is_flowchart in boosted_figures:
+            if positions == boosted_positions:  # 匹配条件可以根据需要修改
+                is_flowchart = boosted_is_flowchart
+                break
+
+        merged_figures.append((image_data, positions, is_flowchart))
+
+    return merged_figures
 
 def chunk(filename, binary=None, from_page=0, to_page=100000,
           lang="Chinese", callback=None, **kwargs):
@@ -184,7 +213,19 @@ def chunk(filename, binary=None, from_page=0, to_page=100000,
                 try:
                     pdf_vision_parser = VisionFigureParser(vision_model=vision_model, figures_data=figures, **kwargs)
                     boosted_figures = pdf_vision_parser(callback=callback)
-                    paper["tables"].extend(boosted_figures)
+
+                    # 提取is_flowchart，做意图识别
+                    merged_figures = merge_figures_and_boosted_figures(figures, boosted_figures)
+
+                    # 针对流程图的特殊处理
+                    flowchart_parser = FlowchartVisionParser(
+                        figures_data=merged_figures,
+                        sam_model="vit_l",
+                        sam_checkpoint_path="/ragflow/flowchart/weights/sam_vit_l_0b3195.pth",
+                        easyocr_model_path="/ragflow/docling/models/easyocr"
+                    )
+                    flowchart_figures = flowchart_parser(callback=callback)
+                    paper["tables"].extend(flowchart_figures)
                 except Exception as e:
                     callback(0.6, f"Visual model error: {e}. Skipping figure parsing enhancement.")
                     paper["tables"].extend(figures)
