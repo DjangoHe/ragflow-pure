@@ -1,0 +1,24 @@
+# 使用 ragflow 的 v0.20.4-slim 镜像作为基础镜像
+FROM infiniflow/ragflow:v0.20.4-slim
+
+# 设置工作目录
+WORKDIR /root
+
+# 配置 uv 使用国内镜像源
+ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+# 复制模型权重和集成代码到容器中对应路径
+# COPY命令用于将文件或目录从构建上下文（context）复制到镜像中。构建上下文是构建时指定的包含Dockerfile以及构建过程中所需的所有文件的目录
+COPY extensions/model-weights /root/model-weights
+COPY extensions/source-code /root/source-code
+
+# 解压 segment-anything-main.zip
+RUN cd /root/source-code && \
+    unzip segment-anything-main.zip
+
+# 安装 segment-anything 库
+RUN cd /root/source-code/segment-anything-main && \
+    uv pip install -e .
+
+# 安装其他依赖项
+RUN uv pip install torch torchvision easyocr --index-url ${UV_INDEX_URL}
