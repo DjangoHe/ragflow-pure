@@ -2,7 +2,7 @@
 FROM infiniflow/ragflow:v0.20.4-slim
 
 # 设置工作目录
-WORKDIR /root
+WORKDIR /ragflow
 
 # 配置 uv 使用国内镜像源
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
@@ -11,6 +11,10 @@ ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
 # COPY命令用于将文件或目录从构建上下文（context）复制到镜像中。构建上下文是构建时指定的包含Dockerfile以及构建过程中所需的所有文件的目录
 COPY extensions/model-weights /root/model-weights
 COPY extensions/source-code /root/source-code
+
+# 改动的代码生效
+COPY deepdoc deepdoc
+COPY rag rag
 
 # 解压 segment-anything-main.zip
 RUN cd /root/source-code && \
