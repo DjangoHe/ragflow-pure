@@ -1412,6 +1412,7 @@ class LiteLLMBase(ABC):
         logging.info("[HISTORY]" + json.dumps(history, ensure_ascii=False, indent=2))
         if self.model_name.lower().find("qwen3") >= 0:
             kwargs["extra_body"] = {"enable_thinking": False}
+            gen_conf["extra_body"] = {"enable_thinking": False}
 
         completion_args = self._construct_completion_args(history=history, stream=False, tools=False, **gen_conf)
         response = litellm.completion(

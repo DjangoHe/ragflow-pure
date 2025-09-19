@@ -219,6 +219,7 @@ def chunk(filename, binary=None, from_page=0, to_page=100000,
 
                     # 针对流程图的特殊处理
                     flowchart_parser = FlowchartVisionParser(
+                        tenant_id = kwargs["tenant_id"],
                         figures_data=merged_figures,
                         sam_model="vit_h",
                         sam_checkpoint_path="/root/model-weights/segment-anything/weights/sam_vit_h_4b8939.pth",

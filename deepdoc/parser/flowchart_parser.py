@@ -8,10 +8,14 @@ import easyocr
 from openai import OpenAI
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 
+from api.db.services.llm_service import LLMBundle
+from api.db import LLMType
+
 class FlowchartVisionParser:
-    def __init__(self, figures_data, sam_model=None, sam_checkpoint_path=None, easyocr_model_path=None, **kwargs):
+    def __init__(self, tenant_id, figures_data, sam_model=None, sam_checkpoint_path=None, easyocr_model_path=None, **kwargs):
         self.figures_data = figures_data
         self._extract_figures_info()
+        self.tenant_id = tenant_id
 
         # 初始化 SAM 模型
         if sam_model and sam_checkpoint_path:
@@ -142,15 +146,25 @@ class FlowchartVisionParser:
         )
 
         try:
-            response = client.chat.completions.create(
-                model="qwen3-14b",
-                messages=[{"role": "system", "content": prompt}],
-                max_tokens=1000,
-                extra_body = {
-                    "enable_thinking": False  # 禁用思考模式
-                }
+            # response = client.chat.completions.create(
+            #     model="qwen3-14b",
+            #     messages=[{"role": "system", "content": prompt}],
+            #     max_tokens=1000,
+            #     extra_body = {
+            #         "enable_thinking": False  # 禁用思考模式
+            #     }
+            # )
+            # return response.choices[0].message.content.replace('\n', '').replace(' .', '.').strip()
+
+            chat_mdl = LLMBundle(self.tenant_id, LLMType.CHAT, "")
+            gen_conf = {"temperature": 0.9}
+            ans = chat_mdl.chat(
+                prompt,
+                [{"role": "user", "content": " "}],
+                gen_conf,
             )
-            return response.choices[0].message.content.replace('\n', '').replace(' .', '.').strip()
+            # data=[re.sub(r"^[0-9]\. ", "", a) for a in ans.split("\n") if re.match(r"^[0-9]\. ", a)]
+            return ans
         except Exception as e:
             return f"Error analyzing flowchart: {str(e)}"
 
