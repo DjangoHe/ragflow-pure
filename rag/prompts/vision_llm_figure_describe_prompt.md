@@ -6,12 +6,17 @@
 判断给定图像是否为流程图，流程图应包含：开始/结束节点、处理节点、决策节点、有向边等
 
 ## output
-is_flowchart:布尔值,表示是否为流程图
+如果判断是流程图，则输出“is_flowchart”
+如果判断不是流程图，则输出“not_flowchart”
 
 ## note
 不要输出解释信息，只输出要求的字段
 
 ## example
 ```
-is_flowchart:true
+is_flowchart
+
+or
+
+not_flowchart
 ```

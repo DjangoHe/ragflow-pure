@@ -149,11 +149,8 @@ class Pdf(PdfParser):
         }
 
 def extract_is_flowchart(text):
-    # 直接匹配 is_flowchart 的值
-    match = re.search(r'is_flowchart\s*:\s*(true|false)', text, re.IGNORECASE)
-    if match:
-        return match.group(1).lower() == 'true'
-    return False
+    # 只要文本中包含 is_flowchart 就返回 True，否则返回 False
+    return 'is_flowchart' in text.lower()
 
 def merge_figures_and_boosted_figures(figures, boosted_figures):
     # 为每个boosted_figure提取is_flowchart
